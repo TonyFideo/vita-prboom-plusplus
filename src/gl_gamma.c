@@ -1,0 +1,250 @@
+/* Emacs style mode select   -*- C++ -*-
+ *-----------------------------------------------------------------------------
+ *
+ *
+ *  PrBoom: a Doom port merged with LxDoom and LSDLDoom
+ *  based on BOOM, a modified and improved DOOM engine
+ *  Copyright (C) 1999 by
+ *  id Software, Chi Hoang, Lee Killough, Jim Flynn, Rand Phares, Ty Halderman
+ *  Copyright (C) 1999-2000 by
+ *  Jess Haas, Nicolas Kalkhof, Colin Phipps, Florian Schulze
+ *  Copyright 2005, 2006 by
+ *  Florian Schulze, Colin Phipps, Neil Stevens, Andrey Budko
+ *
+ *  This program is free software; you can redistribute it and/or
+ *  modify it under the terms of the GNU General Public License
+ *  as published by the Free Software Foundation; either version 2
+ *  of the License, or (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ *  02111-1307, USA.
+ *
+ * DESCRIPTION:
+ *
+ *---------------------------------------------------------------------
+ */
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include <math.h>
+#include <sys/stat.h>
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+#include <SDL.h>
+#include "doomstat.h"
+#include "v_video.h"
+#include "gl_intern.h"
+#include "doomtype.h"
+#include "i_video.h"
+#include "m_argv.h"
+#include "lprintf.h"
+
+#include "gl_opengl.h"
+
+#ifndef HIBYTE
+#define HIBYTE(W) (((W) >> 8) & 0xFF)
+#endif
+
+int useglgamma;
+int gl_DeviceSupportsGamma = false;
+
+#ifdef __vita__
+int gl_fake_gamma = 1;
+int gl_fake_gamma_value = 1;
+#endif
+
+static Uint16 gl_oldHardwareGamma[3][256];
+
+//
+// gld_CheckHardwareGamma
+//
+// Determines if the underlying hardware supports the Win32 gamma correction API.
+//
+void gld_CheckHardwareGamma(void)
+{
+#ifndef __vita__
+  gl_DeviceSupportsGamma = (-1 != SDL_GetWindowGammaRamp(sdl_window, gl_oldHardwareGamma[0], gl_oldHardwareGamma[1], gl_oldHardwareGamma[2]));
+#endif
+
+  if (gl_DeviceSupportsGamma)
+  {
+    //
+    // do a sanity check on the gamma values
+    //
+    if (
+      (HIBYTE(gl_oldHardwareGamma[0][255]) <= HIBYTE(gl_oldHardwareGamma[0][0])) ||
+      (HIBYTE(gl_oldHardwareGamma[1][255]) <= HIBYTE(gl_oldHardwareGamma[1][0])) ||
+      (HIBYTE(gl_oldHardwareGamma[2][255]) <= HIBYTE(gl_oldHardwareGamma[2][0])))
+    {
+      gl_DeviceSupportsGamma = false;
+    }
+
+    //
+    // make sure that we didn't have a prior crash in the game, and if so we need to
+    // restore the gamma values to at least a linear value
+    //
+    if ((HIBYTE(gl_oldHardwareGamma[0][181]) == 255))
+    //if ((HIBYTE(gl_oldHardwareGamma[0][247]) == 255))
+    {
+      int g;
+
+      lprintf(LO_WARN, "gld_CheckHardwareGamma: suspicious gamma tables, using linear ramp for restoration\n");
+
+      for ( g = 0; g < 255; g++ )
+      {
+        gl_oldHardwareGamma[0][g] = g << 8;
+        gl_oldHardwareGamma[1][g] = g << 8;
+        gl_oldHardwareGamma[2][g] = g << 8;
+      }
+    }
+
+  }
+
+  if (!gl_DeviceSupportsGamma)
+  {
+    lprintf(LO_WARN, "gld_CheckHardwareGamma: device has broken gamma support\n");
+  }
+}
+
+//
+// gld_SetGammaRamp
+//
+// This routine should only be called if gl_DeviceSupportsGamma is TRUE
+//
+int gld_SetGammaRamp(int gamma)
+{
+  int succeeded = false;
+  static int first = true;
+  float g = (BETWEEN(0, MAX_GLGAMMA, gamma)) / 10.0f + 1.0f;
+  Uint16 gammatable[256];
+
+  if (!gl_DeviceSupportsGamma)
+  {
+#ifdef __vita__
+    if (gl_fake_gamma)
+    {
+      gl_fake_gamma_value = gamma;
+      return true;
+    }
+#endif
+    return false;
+  }
+
+  if (gamma == -1)
+  {
+    succeeded = (SDL_SetWindowGammaRamp(sdl_window, gl_oldHardwareGamma[0], gl_oldHardwareGamma[1], gl_oldHardwareGamma[2]) != -1);
+  }
+  else
+  {
+    if (first && desired_fullscreen)
+    {
+      // From GZDoom:
+      //
+      // Fix for Radeon 9000, possibly other R200s: When the device is
+      // reset, it resets the gamma ramp, but the driver apparently keeps a
+      // cached copy of the ramp that it doesn't update, so when
+      // SetGammaRamp is called later to handle the NeedGammaUpdate flag,
+      // it doesn't do anything, because the gamma ramp is the same as the
+      // one passed in the last call, even though the visible gamma ramp 
+      // actually has changed.
+      //
+      // So here we force the gamma ramp to something absolutely horrible and
+      // trust that we will be able to properly set the gamma later
+      first = false;
+      memset(gammatable, 0, sizeof(gammatable));
+      SDL_SetWindowGammaRamp(sdl_window, NULL, NULL, gammatable);
+    }
+
+    SDL_CalculateGammaRamp(g, gammatable);
+
+    // has no effect sometimes on Intel Graphics
+    // do it twice!
+    SDL_SetWindowGammaRamp(sdl_window, gammatable, gammatable, gammatable);
+    succeeded = (SDL_SetWindowGammaRamp(sdl_window, gammatable, gammatable, gammatable) != -1);
+    if (!succeeded)
+    {
+      lprintf(LO_WARN, "gld_SetGammaRamp: hardware gamma adjustment is not supported\n");
+      gl_lightmode = gl_lightmode_glboom;
+    }
+  }
+
+  return succeeded;
+}
+
+// gld_ResetGammaRamp
+// Restoring the gamma values to a linear value and exit
+void gld_ResetGammaRamp(void)
+{
+  if (M_CheckParm("-resetgamma"))
+  {
+    if (gld_SetGammaRamp(1))
+    {
+      lprintf(LO_WARN, "gld_ResetGammaRamp: suspicious gamma tables, using linear ramp for restoration\n");
+      _exit(0);
+    }
+  }
+}
+
+void gld_ApplyGammaRamp(byte *buf, int pitch, int width, int height)
+{
+  if (gl_hardware_gamma && gl_DeviceSupportsGamma)
+  {
+    int w, h;
+    byte *pixel;
+    Uint16 r[256], g[256], b[256];
+
+    SDL_GetWindowGammaRamp(sdl_window, &r[0], &g[0], &b[0]);
+
+    for (h = 0; h < height; h++)
+    {
+      for (w = 0; w < width; w++)
+      {
+        pixel = buf + h * pitch + 3 * w;
+
+        *(pixel + 0) = (byte)(r[*(pixel + 0)] >> 8);
+        *(pixel + 1) = (byte)(g[*(pixel + 1)] >> 8);
+        *(pixel + 2) = (byte)(b[*(pixel + 2)] >> 8);
+      }
+    }
+  }
+}
+
+#ifdef __vita__
+void gld_BlendFakeGamma(void)
+{
+  float gammaf;
+
+  if (gl_fake_gamma_value <= 0)
+    return;
+
+  gammaf = (float)(MAX_GLGAMMA - gl_fake_gamma_value) / (float)MAX_GLGAMMA;
+
+  glDisable(GL_DEPTH_TEST);
+  glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+  glDisable(GL_ALPHA_TEST);
+  glBlendFunc(GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA);
+
+  glColor4f(1.f, 1.f, 1.f, gammaf);
+  glBegin(GL_TRIANGLE_STRIP);
+    glVertex3f(0.f, 0.f, 0.f);
+    glVertex3f(SCREENWIDTH, 0.f, 0.f);
+    glVertex3f(0.f, SCREENHEIGHT, 0.f);
+    glVertex3f(SCREENWIDTH, SCREENHEIGHT, 0.f);
+  glEnd();
+
+  glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+  glEnable(GL_ALPHA_TEST);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glEnable(GL_DEPTH_TEST);
+}
+#endif
