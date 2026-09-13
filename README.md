@@ -1,6 +1,4 @@
-# PrBoom+ Vita
-
-Port of PrBoom+ 2.6.66 for PlayStation Vita.
+# Vita-PrBooom++ (PrBoom+ 2.6.66 for the PSVITA.
 
 The Vita build uses the bundled `texture_matrix` VitaGL fork. The fork is
 kept inside this repository so the build does not depend on a separately
