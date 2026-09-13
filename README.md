@@ -3,9 +3,13 @@ The Vita build uses the bundled `texture_matrix` VitaGL fork with the original r
 
 ## Features
 -Updated to mainstream 2.6.66.
+
 -Vita features (WIP).
+
 -Made in mind for Community WADs.
+
 -Doesn't need OC for 60 fps.
+
 -More to come...
 
 ## Game data
