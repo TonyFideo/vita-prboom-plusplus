@@ -1,5 +1,4 @@
-# Vita-PrBooom++ (PrBoom+ 2.6.66 for the PSVITA).
-#RESEARCH REPO
+# Vita-PrBooom++ (PrBoom+ 2.6.66 for the PSVITA) RESEARCH REPO.
 
 ## Features
 -Updated to mainstream 2.6.66.
