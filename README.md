@@ -1,10 +1,15 @@
 # Vita-PrBooom++ (PrBoom+ 2.6.66 for the PSVITA).
-This starting release uses the old bundled `texture_matrix` VitaGL fork with the original repo.
+#RESEARCH REPO
 
 ## Features
 -Updated to mainstream 2.6.66.
+
+-Modern build of VitaGL.
+
 -Vita features (WIP).
--More to come...
+
+-Extra CPU performance tweaks for heavy WADs.
+
 
 ## Game data
 This project doesn't distribute Doom WADs. Put your IWAD inside `data/prboom/iwads/`. PWADs go in
