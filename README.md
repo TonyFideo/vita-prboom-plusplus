@@ -1,15 +1,9 @@
 # Vita-PrBooom++ (PrBoom+ 2.6.66 for the PSVITA).
-The Vita build uses the bundled `texture_matrix` VitaGL fork with the original repo.
+This starting release uses the old bundled `texture_matrix` VitaGL fork with the original repo.
 
 ## Features
 -Updated to mainstream 2.6.66.
-
 -Vita features (WIP).
-
--Made in mind for Community WADs.
-
--Doesn't need OC for 60 fps.
-
 -More to come...
 
 ## Game data
